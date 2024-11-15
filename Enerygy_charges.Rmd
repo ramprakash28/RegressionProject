@@ -1,0 +1,188 @@
+---
+title: "Regression Analysis on Energy consumption data"
+author: "The Energy Data Club"
+date: "2024-11-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(dplyr)
+
+# Load the dataset
+steel_data <- read.csv("Steel_industry_data.csv")
+
+# Check column names to see their exact format
+colnames(steel_data)
+
+# Sanitize column names for easier reference
+colnames(steel_data) <- make.names(colnames(steel_data))
+
+# Rename sanitized columns for easier access
+steel_data <- steel_data %>%
+  rename(Lagging_Reactive_kVarh = Lagging_Current_Reactive.Power_kVarh,
+         CO2_tons = CO2.tCO2.)
+
+# Convert WeekStatus to a factor (categorical variable)
+steel_data$WeekStatus <- as.factor(steel_data$WeekStatus)
+
+# Fit the multiple linear regression model
+model <- lm(Usage_kWh ~ Lagging_Reactive_kVarh + CO2_tons + WeekStatus, data = steel_data)
+
+# Display the model summary
+summary(model)
+
+
+```
+
+```{r}
+
+# Calculate 95% confidence intervals for each coefficient
+confint(model, level = 0.95)
+
+# Calculate goodness-of-fit metrics: R-squared and Adjusted R-squared
+rsquared <- summary(model)$r.squared
+adj_rsquared <- summary(model)$adj.r.squared
+
+# Print the goodness-of-fit metrics
+cat("R-squared:", rsquared, "\n")
+cat("Adjusted R-squared:", adj_rsquared, "\n")
+
+```
+
+
+```{r}
+# Install and load the lmtest package if not already installed
+if (!require(lmtest)) install.packages("lmtest", dependencies=TRUE)
+library(lmtest)
+
+# Perform the Durbin-Watson test on the regression model
+dw_test_result <- dwtest(model)
+
+# Display the test result
+print(dw_test_result)
+
+
+```
+
+
+```{r}
+
+# Residuals vs Fitted plot only
+par(pin = c(4, 4))
+plot(model$fitted.values, resid(model), 
+     main = "Residuals vs Fitted", 
+     xlab = "Fitted values", 
+     ylab = "Residuals")
+abline(h = 0, col = "red")
+
+
+```
+
+
+```{r}
+
+# Diagnostic plots (including Residuals vs Fitted and Scale-Location)
+par(mfrow = c(1,1))
+plot(model)
+
+```
+
+
+```{r}
+
+# Install and load the car package if not already installed
+library(car)
+
+# Calculate VIF for each predictor in the model
+vif_values <- vif(model)
+
+# Display the VIF values
+print(vif_values)
+
+
+```
+
+
+```{r}
+
+# Calculate Cook's Distance for each observation
+
+# Calculate Cook's Distance
+cooks_dist <- cooks.distance(model)
+
+# Plot Cook's Distance with a more practical threshold
+plot(cooks_dist, type = "h", main = "Cook's Distance", ylab = "Cook's Distance")
+abline(h = 0.5, col = "blue", lty = 2)  # Threshold at 0.5 for potentially influential points
+abline(h = 1, col = "red", lty = 2)  # Threshold at 1 for highly influential points
+
+
+```
+
+
+```{r}
+
+# Identify points with Cook's Distance > 0.5 or 1
+influential_points <- which(cooks_dist > 0.5)
+highly_influential_points <- which(cooks_dist > 1)
+
+# Print or examine the influential points
+print(influential_points)
+print(highly_influential_points)
+
+```
+
+
+```{r}
+
+# Check for zero or negative values in Usage_kWh
+sum(steel_data$Usage_kWh <= 0)
+
+```
+
+###Filter Out Zero or Negative Usage_kWh Values
+
+```{r}
+
+# Remove rows where Usage_kWh is zero or negative
+filtered_data <- steel_data %>% filter(Usage_kWh > 0)
+
+# Refit the model with log-transformed response variable on filtered data
+log_model <- lm(log(Usage_kWh) ~ Lagging_Reactive_kVarh + CO2_tons + WeekStatus, data = filtered_data)
+
+# Check the summary of the transformed model
+summary(log_model)
+
+# Diagnostic plots to see if heteroscedasticity has been reduced
+par(mfrow = c(2, 2))
+plot(log_model)
+
+
+```
+
+###Using WLS
+
+```{r}
+# Calculate weights based on the inverse of residual variance
+weights <- 1 / abs(resid(model))
+
+# Fit the weighted least squares model
+wls_model <- lm(Usage_kWh ~ Lagging_Reactive_kVarh + CO2_tons + WeekStatus, data = steel_data, weights = weights)
+
+# Check the summary of the weighted model
+summary(wls_model)
+
+# Diagnostic plots to verify if heteroscedasticity is reduced
+par(mfrow = c(1, 1))
+plot(wls_model)
+
+```
+
+```{r}
+
+
+```
